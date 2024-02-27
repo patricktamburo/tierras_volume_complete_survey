@@ -73,16 +73,22 @@ def query_twomass(res, save=True):
 		res.to_csv('sample.csv',index=0)
 	return res
 
-def estimate_m_and_r(res):
+def estimate_m_and_r(res, save=True):
 	# get masses following M-M_K relation from Benedict et al. (2016)
 	abs_k_mags = np.zeros(len(res))
 	abs_k_mag_errs = np.zeros_like(abs_k_mags)
 	masses = np.zeros_like(abs_k_mags)
 	mass_errs = np.zeros_like(abs_k_mags)
-	radii = np.zeros_like(abs_k_mags)
-	radius_errs = np.zeros_like(abs_k_mags)
 	dists = np.zeros_like(abs_k_mags)
 	dist_errs = np.zeros_like(abs_k_mags)
+
+	# get radii following M-R relation in Boyajian et al. (2012)
+	c0 = 0.0906
+	c0_err = 0.0027
+	c1 = 0.6063
+	c1_err = 0.0153
+	c2 = 0.32
+	c2_err = 0.0165
 
 	abs_k_mags = res['k_mag'] - 5 * np.log10(res['r_med_photogeo']) + 5
 	for i in range(len(res)):
@@ -95,13 +101,20 @@ def estimate_m_and_r(res):
 		dist_errs[i] = dist_err
 		k_mag = res['k_mag'][i]
 		k_mag_err = res['k_mag_error'][i]
-		# abs_k_mags[i] = k_mag - 5*np.log10(dist) + 5
-		# abs_k_mag_errs[i] = (k_mag_err**2 + (dist_err*5/(dist*np.log(10)))**2)**0.5
+		
 		mass_posterior = mann_19_mass_mk(k_mag, dist, k_mag_err, dist_err)
 		masses[i] = np.nanmedian(mass_posterior)	
 		mass_errs[i] = np.nanstd(mass_posterior)
-	breakpoint()
-	return
+	
+	radii = c0 + c1*masses + c2*masses**2
+	radius_errs = np.sqrt((c0_err)**2 + (masses*c1_err)**2 + (masses**2 * c2_err)**2 + ((c1+2*c2*masses)*mass_errs)**2)
+	res['mass'] = masses
+	res['mass_error'] = mass_errs
+	res['radius'] = radii
+	res['radius_error'] = radius_errs
+	if save:
+		res.to_csv('sample.csv', index=0)
+	return res
 
 def exclude_tess(res, save=True):
 	# mask out sources that have been/ will be observed in TESS using tess_point
@@ -202,26 +215,24 @@ def exclude_mearth(df):
 	return df
 
 if __name__ == '__main__':
-	# # step 1: query for nearby M dwarfs in Gaia using colors
-	# gaia_res = query_gaia()
+	# step 1: query for nearby M dwarfs in Gaia using colors
+	#gaia_res = query_gaia()
 
-	# # step 2: throw out any that have been/will be observed with TESS
-	# df = exclude_tess(gaia_res)
+	# step 2: throw out any that have been/will be observed with TESS
+	#df = exclude_tess(gaia_res)
 	
-	# # step 3: figure out which have been observed in MEarth
-	# df = pd.read_csv('sample.csv')
-	# df = exclude_mearth(df)
+	# step 3: figure out which have been observed in MEarth
+	df = pd.read_csv('sample.csv')
+	df = exclude_mearth(df)
 
-	# # step 4: get 2MASS magnitudes 
-	# df = query_twomass(df)
+	# step 4: get 2MASS magnitudes 
+	df = query_twomass(df)
 
 	# step 5: estimate masses and radii for the sources
 	df = pd.read_csv('sample.csv')
 	df = estimate_m_and_r(df)
 
-	breakpoint()
-
-	
+	df = pd.read_csv('sample.csv')	
 	sample_plots(df)
 	breakpoint()
 	
